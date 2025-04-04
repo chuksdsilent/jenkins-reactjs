@@ -51,27 +51,45 @@ pipeline{
                 }
             }
         }
-        stage('Deploy to container'){
-            steps{
-                sh "docker run -d --name my-app -p 3000:5000 oshabz/my-app:latest${DOCKER_IMAGE}:${IMAGE_TAG}"
+        stage('Update Deployment File') {
+            environment {
+                GIT_REPO_NAME = "jenkins-reactjs"
+                GIT_USER_NAME = "chuksdsilent"
             }
-        }
-        steps {
-            withCredentials([string(credentialsId: 'github', variable: 'GITHUB_TOKEN')]) {
-                environment {
-                    GIT_REPO_NAME = "jenkins-reactjs"
-                    GIT_USER_NAME = "chuksdsilent"
+            steps {
+                withCredentials([string(credentialsId: 'github', variable: 'GITHUB_TOKEN')]) {
+                    script {
+                        def prevBuild = currentBuild.previousBuild
+                        gitEmail = "chuksdsilent@gmail.com"
+                        gitName = "Samson"
+            
+                        if (prevBuild != null) {
+                            sh """
+                                git config user.email "${gitEmail}"
+                                git config user.name "${gitName}"
+                                
+                                 sed -i "s/replaceImageTag/${BUILD_NUMBER}/g"  manifests/deployment.yml
+                                
+                                git add manifests/deployment.yml
+                                git commit -m "Update deployment image to version"
+                                git push https://${GITHUB_TOKEN}@github.com/${GIT_USER_NAME}/${GIT_REPO_NAME} HEAD:main
+                            """
+                        } else {
+                            sh """
+                                git config user.email "${gitEmail}"
+                                git config user.name "${gitName}"
+                                
+                                sed -i "s/ ${prevBuild.number}/${BUILD_NUMBER}/g" manifests/deployment.yml
+                                
+                                git add manifests/deployment.yml
+                                git commit -m "Initial deployment image set to version"
+                                git push https://${GITHUB_TOKEN}@github.com/${GIT_USER_NAME}/${GIT_REPO_NAME} HEAD:main
+                            """
+                        }
+                    }
                 }
-                sh '''
-                    git config user.email "chuksdsilent@gmail.com"
-                    git config user.name "Samson"
-                    BUILD_NUMBER=${BUILD_NUMBER}
-                    sed -i "s/replaceImageTag/${BUILD_NUMBER}/g" manifests/deployment.yml
-                    git add manifests/deployment.yml
-                    git commit -m "Update deployment image to version ${BUILD_NUMBER}"
-                    git push https://${GITHUB_TOKEN}@github.com/${GIT_USER_NAME}/${GIT_REPO_NAME} HEAD:main
-                '''
             }
+
         }
 
     }
