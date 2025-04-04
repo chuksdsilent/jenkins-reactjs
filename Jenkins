@@ -1,11 +1,13 @@
 pipeline{
     agent any
     tools{
-        jdk 'jdk-17'
-        nodejs 'Node16'
+        jdk 'jdk'
+        nodejs 'nodejs'
     }
     environment {
         SCANNER_HOME=tool 'sonar'
+        DOCKER_IMAGE = "oshabz/my-app"
+        IMAGE_TAG = "${BUILD_NUMBER}"
     }
     stages {
         stage('clean workspace'){
@@ -15,21 +17,21 @@ pipeline{
         }
         stage('Checkout from Git'){
             steps{
-                git branch: 'main', url: 'https://github.com/Aseemakram19/bingo1.git'
+                git branch: 'main', url: 'https://github.com/chuksdsilent/jenkins-reactjs.git'
             }
         }
-        stage("Sonarqube Analysis "){
+        stage("Sonarqube Analysis"){
             steps{
-                withSonarQubeEnv('sonar-server') {
-                    sh ''' $SCANNER_HOME/bin/sonar-scanner -Dsonar.projectName=Bingo \
-                    -Dsonar.projectKey=Bingo '''
+                withSonarQubeEnv('sonar') {
+                    sh ''' $SCANNER_HOME/bin/sonar-scanner -Dsonar.projectName=my-app \
+                    -Dsonar.projectKey=my-app '''
                 }
             }
         }
         stage("quality gate"){
            steps {
                 script {
-                    waitForQualityGate abortPipeline: false, credentialsId: 'Sonar-token' 
+                    waitForQualityGate abortPipeline: false, credentialsId: 'sonar' 
                 }
             } 
         }
@@ -38,36 +40,37 @@ pipeline{
                 sh "npm install"
             }
         }
-        stage('OWASP FS SCAN') {
-            steps {
-                dependencyCheck additionalArguments: '--scan ./ --disableYarnAudit --disableNodeAudit', odcInstallation: 'DP'
-                dependencyCheckPublisher pattern: '**/dependency-check-report.xml'
-            }
-        }
-            stage('TRIVY FS SCAN') {
-            steps {
-                sh "trivy fs . > trivyfs.txt"
-            }
-        }
         stage("Docker Build & Push"){
             steps{
                 script{
                    withDockerRegistry(credentialsId: 'docker', toolName: 'docker'){   
-                       sh "docker build -t bingo ."
-                       sh "docker tag bingo aseemakram19/bingo:latest "
-                       sh "docker push aseemakram19/bingo:latest "
+                       sh "docker build -t my-app ."
+                       sh "docker tag my-app ${DOCKER_IMAGE}:${IMAGE_TAG}"
+                       sh "docker push ${DOCKER_IMAGE}:${IMAGE_TAG}"
                     }
                 }
             }
         }
-        stage("TRIVY"){
-            steps{
-                sh "trivy image aseemakram19/bingo:latest > trivyimage.txt" 
-            }
-        }
         stage('Deploy to container'){
             steps{
-                sh 'docker run -d --name bingo -p 3000:3000 aseemakram19/bingo:latest'
+                sh "docker run -d --name my-app -p 3000:5000 oshabz/my-app:latest${DOCKER_IMAGE}:${IMAGE_TAG}"
+            }
+        }
+        steps {
+            withCredentials([string(credentialsId: 'github', variable: 'GITHUB_TOKEN')]) {
+                environment {
+                    GIT_REPO_NAME = "jenkins-reactjs"
+                    GIT_USER_NAME = "chuksdsilent"
+                }
+                sh '''
+                    git config user.email "chuksdsilent@gmail.com"
+                    git config user.name "Samson"
+                    BUILD_NUMBER=${BUILD_NUMBER}
+                    sed -i "s/replaceImageTag/${BUILD_NUMBER}/g" manifests/deployment.yml
+                    git add manifests/deployment.yml
+                    git commit -m "Update deployment image to version ${BUILD_NUMBER}"
+                    git push https://${GITHUB_TOKEN}@github.com/${GIT_USER_NAME}/${GIT_REPO_NAME} HEAD:main
+                '''
             }
         }
 

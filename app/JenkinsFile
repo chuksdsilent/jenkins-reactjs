@@ -1,0 +1,73 @@
+pipeline {
+  agent any
+    tools{
+        jdk 'jdk'
+        maven 'maven'
+    }
+    environment {
+        SCANNER_HOME=tool 'sonar'
+        DOCKER_IMAGE = "oshabz/springboot-app"
+        IMAGE_ID = "${BUILD_NUMBER}"
+        GIT_REPO_NAME = "Jenkins-sonarqube-argocd"
+        GIT_USER_NAME = "Chuks-Devops"
+        EMAIL = "chuksdsilent@gmail.com"
+        NAME = "Samson"
+    }
+  stages {
+    stage('Checkout') {
+      steps {
+        git branch: 'main', url: 'https://github.com/Chuks-Devops/Jenkins-sonarqube-argocd.git'
+      }
+    }
+    stage('Build and Test') {
+      steps {
+        sh 'ls -ltr'
+        // build the project and create a JAR file
+        sh 'cd app && mvn clean package  -DskipTests'
+      }
+    }
+    stage("Sonarqube Analysis"){
+        steps{
+            withSonarQubeEnv('sonar') {
+                sh ''' $SCANNER_HOME/bin/sonar-scanner -Dsonar.projectName=my-app \
+                -Dsonar.projectKey=my-app '''
+            }
+        }
+    }
+    stage("quality gate"){
+       steps {
+            script {
+                waitForQualityGate abortPipeline: false, credentialsId: 'Sonar-token' 
+            }
+        } 
+    }
+    stage("Docker Build & Push"){
+        steps{
+            script{
+               withDockerRegistry(credentialsId: 'docker', toolName: 'docker'){   
+                   sh "cd app && docker build -t spingboot-app ."
+                   sh "docker tag spingboot-app  ${DOCKER_IMAGE}:${IMAGE_ID}"
+                   sh "docker push ${DOCKER_IMAGE}:${IMAGE_ID}"
+                }
+            }
+        }
+    }
+    stage('Update Deployment File') {
+        steps {
+            withCredentials([string(credentialsId: 'github', variable: 'GITHUB_TOKEN')]) {
+                sh '''
+                    git config user.email  ${EMAIL}
+                    git config user.name  ${NAME}
+                    BUILD_NUMBER=${IMAGE_ID}
+                    sed -i "s/replaceImageTag/${IMAGE_ID}/g" manifest/deployment.yml
+                    git add manifest/deployment.yml
+                    git commit -m "Update deployment image to version ${BUILD_NUMBER}"
+                    git push https://${GITHUB_TOKEN}@github.com/${GIT_USER_NAME}/${GIT_REPO_NAME} HEAD:main
+                '''
+            }
+        }
+            
+    }
+    
+  }
+}
