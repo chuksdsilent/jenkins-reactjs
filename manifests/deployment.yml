@@ -18,4 +18,5 @@ spec:
       - name: my-app
         image: oshabz/my-app:2
         ports:
-        - containerPort: 8080
+        - containerPort: 5000
+

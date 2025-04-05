@@ -60,37 +60,39 @@ pipeline{
                 withCredentials([string(credentialsId: 'github', variable: 'GITHUB_TOKEN')]) {
                     script {
                         def prevBuild = currentBuild.previousBuild
-                        gitEmail = "chuksdsilent@gmail.com"
-                        gitName = "Samson"
-            
-                        if (prevBuild != null) {
+                        def gitEmail = "chuksdsilent@gmail.com"
+                        def gitName = "Samson"
+        
+                        if (prevBuild == null) {
+                            // First build
+                            
                             sh """
                                 git config user.email "${gitEmail}"
                                 git config user.name "${gitName}"
-                                
-                                 sed -i "s/replaceImageTag/${BUILD_NUMBER}/g"  manifests/deployment.yml
-                                
+        
+                                sed -i "s/replaceImageTag/${BUILD_NUMBER}/g" manifests/deployment.yml
+        
                                 git add manifests/deployment.yml
-                                git commit -m "Update deployment image to version"
+                                git commit -m "Initial deployment image set to version ${BUILD_NUMBER}"
                                 git push https://${GITHUB_TOKEN}@github.com/${GIT_USER_NAME}/${GIT_REPO_NAME} HEAD:main
                             """
                         } else {
+                            
+                            // Second and later builds
                             sh """
                                 git config user.email "${gitEmail}"
                                 git config user.name "${gitName}"
-                                
-                                sed -i "s/ ${prevBuild.number}/${BUILD_NUMBER}/g" manifests/deployment.yml
-                                
+        
+                                sed -i "s/${prevBuild.number}/${BUILD_NUMBER}/g" manifests/deployment.yml
+        
                                 git add manifests/deployment.yml
-                                git commit -m "Initial deployment image set to version"
+                                git commit -m "Update deployment image to version ${BUILD_NUMBER}"
                                 git push https://${GITHUB_TOKEN}@github.com/${GIT_USER_NAME}/${GIT_REPO_NAME} HEAD:main
                             """
                         }
                     }
                 }
             }
-
         }
-
     }
 }
