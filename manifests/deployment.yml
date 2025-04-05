@@ -16,6 +16,6 @@ spec:
     spec:
       containers:
       - name: my-app
-        image: oshabz/my-app:1
+        image: oshabz/my-app:2
         ports:
         - containerPort: 8080
